@@ -62,6 +62,7 @@
         ├── contracts/
         │   ├── route-decision.schema.json
         │   ├── finding.schema.json
+        │   ├── reviewer-output.schema.json
         │   └── review-result.schema.json
         └── templates/
             └── review-report.md
@@ -179,6 +180,19 @@ Route Decision 的 `reason` 完整记录目标与默认分支来源、材料固�
 
 ## 7. Finding 与汇总契约
 
+每个 reviewer 只返回一个符合 `contracts/reviewer-output.schema.json` 的关闭 Envelope：
+
+```yaml
+review_id: review-20260710-001       # 与 Review Packet 一致的非空字符串
+reviewer: security-abuse             # 9 个稳定 reviewer ID 之一
+findings: []                         # 每项引用 finding.schema.json
+reviewed_scope: []                   # 实际检查范围，字符串数组
+limitations: []                      # 证据限制，字符串数组
+report_language: zh-CN
+```
+
+Envelope 不接受未声明字段。Chair 必须先校验 Envelope，再校验其中每条 Finding；`envelope reviewer` 必须等于每条 `finding.reviewer`，同一 Envelope 内本地 Finding ID 必须唯一。格式错误只允许原 reviewer 重排一次。
+
 每条有效 Finding 必须满足：
 
 ```yaml
@@ -216,8 +230,11 @@ limitations: []                  # 字符串数组
 
 Chair 的处理规则：
 
-- 先校验 Finding Schema 和证据完整性。
-- 按主张、位置和影响合并重复问题，同时保留多个证据来源。
+- 先按 `reviewer-output.schema.json` 校验 Envelope，再按 `finding.schema.json` 校验每条 Finding 和证据完整性。
+- 允许不同 reviewer 各自使用本地 `F-001…`；以 `(reviewer, local_id)` 作为不会碰撞的源键。
+- 按 Router 的 `required_reviewers` 顺序和各 Envelope 原输出顺序遍历，按主张、位置和影响去重，以首次出现者为规范项并确定性分配全局 Finding ID `F-001…`。
+- 建立所有源键到全局 ID 的映射；多个源键去重到同一问题时映射到同一全局 ID，并保留、标注所有 evidence 来源。
+- 完成映射后原子更新全部 `reviewer_results.finding_ids`，不得留下本地 ID 或部分更新状态。
 - Reviewer 冲突标记为 `needs_human_decision`，不投票。
 - 没有可核查证据的意见降为 `question` 或丢弃。
 - 单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。

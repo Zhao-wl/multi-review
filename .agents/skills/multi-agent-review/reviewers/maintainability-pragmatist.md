@@ -22,4 +22,4 @@ reviewer_id: maintainability-pragmatist
 
 ## 输出
 
-仅返回符合 `contracts/finding.schema.json` 的 findings，以及本角色的检查范围和证据限制。使用中文；技术标识保持原文。不得修改项目、联系其他 reviewer 或执行修复。不得派生子代理。
+只返回符合 `contracts/reviewer-output.schema.json` 的单个 Envelope，包含 review_id、reviewer、findings、reviewed_scope、limitations、report_language。使用中文；技术标识保持原文。不得修改项目、不得联系其他 reviewer、不得执行修复、不得派生子代理。

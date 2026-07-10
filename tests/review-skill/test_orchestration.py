@@ -16,6 +16,7 @@ class OrchestrationTests(unittest.TestCase):
             "orchestration/risk-levels.md",
             "routing/default-routes.yaml",
             "contracts/finding.schema.json",
+            "contracts/reviewer-output.schema.json",
             "templates/review-report.md",
         ]:
             self.assertIn(path, text)
@@ -70,6 +71,19 @@ class OrchestrationTests(unittest.TestCase):
         self.assertNotIn("2–3 个只允许来自用户手动排除", router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
+        for phrase in [
+            "contracts/reviewer-output.schema.json",
+            "先校验 Envelope，再校验每条 Finding",
+            "envelope reviewer 必须等于每条 finding.reviewer",
+            "同一 envelope 内的 local ID 必须唯一",
+            "(reviewer, local_id)",
+            "全局 Finding ID",
+            "required_reviewers 顺序",
+            "原输出顺序",
+            "原子更新 reviewer_results.finding_ids",
+            "所有来源",
+        ]:
+            self.assertIn(phrase, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
             self.assertIn(phrase, risk)
 

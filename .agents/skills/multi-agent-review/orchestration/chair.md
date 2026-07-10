@@ -2,9 +2,9 @@
 
 只在全部 reviewer 完成、失败或超时后开始汇总。
 
-1. 按 contracts/finding.schema.json 校验。格式错误时只允许原 reviewer 修正格式一次；不得由 Chair 或其他 reviewer 代写。重排后仍无效则将该 reviewer 标为 invalid，必选 reviewer 因此缺失时整体为 incomplete。
+1. 先按 contracts/reviewer-output.schema.json 校验 Envelope，再按 contracts/finding.schema.json 校验每条 Finding，即“先校验 Envelope，再校验每条 Finding”。envelope reviewer 必须等于每条 finding.reviewer；同一 envelope 内的 local ID 必须唯一。格式错误时只允许原 reviewer 修正格式一次；不得由 Chair 或其他 reviewer 代写。重排后仍无效则将该 reviewer 标为 invalid，必选 reviewer 因此缺失时整体为 incomplete。
 2. 缺少可核查证据的意见降为 question 或丢弃；关键证据不足时整体为 incomplete。
-3. 按 claim、location、impact 去重，保留所有独立 evidence 来源。
+3. 允许各 reviewer 在自身 Envelope 中使用本地 `F-001…`。聚合时以 `(reviewer, local_id)` 为源键，先按 Router 的 required_reviewers 顺序，再按各 Envelope 的原输出顺序遍历；按 claim、location、impact 去重，以首次出现者为规范项并分配全局 Finding ID `F-001…`。建立每个源键到全局 ID 的映射，并原子更新 reviewer_results.finding_ids；合并 evidence 时标注所有来源。
 4. 不投票，不使用多数结论。单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。
 5. 无法由证据解决的冲突标记 needs_human_decision。
 6. 只有无 blocking、无关键证据缺口、所有必选 reviewer 完成时才允许 pass。

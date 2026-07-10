@@ -397,6 +397,7 @@ git commit -m "feat: define review contracts and routing"
 **文件：**
 
 - Create: `tests/review-skill/test_orchestration.py`
+- Create: `.agents/skills/multi-agent-review/contracts/reviewer-output.schema.json`
 - Create: `.agents/skills/multi-agent-review/SKILL.md`
 - Create: `.agents/skills/multi-agent-review/orchestration/router.md`
 - Create: `.agents/skills/multi-agent-review/orchestration/chair.md`
@@ -404,8 +405,8 @@ git commit -m "feat: define review contracts and routing"
 
 **接口：**
 
-- Consumes: Task 2 的路由表、Schema 和报告模板。
-- Produces: 可被三端发现的 `multi-agent-review` 技能入口，以及 Router/Chair 的明确执行协议。
+- Consumes: Task 2 的路由表、Finding/Review Result Schema 和报告模板。
+- Produces: 关闭的 reviewer 输出 Envelope Schema、可被三端发现的 `multi-agent-review` 技能入口，以及 Router/Chair 的明确执行协议。
 
 - [ ] **Step 1：写失败测试**
 
@@ -421,7 +422,8 @@ class OrchestrationTests(unittest.TestCase):
         text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         self.assertLess(len(text), 6000)
         for path in ["orchestration/router.md", "orchestration/chair.md", "orchestration/risk-levels.md",
-                     "routing/default-routes.yaml", "contracts/finding.schema.json", "templates/review-report.md"]:
+                     "routing/default-routes.yaml", "contracts/finding.schema.json",
+                     "contracts/reviewer-output.schema.json", "templates/review-report.md"]:
             self.assertIn(path, text)
 
     def test_skill_requires_real_isolated_read_only_reviewers(self):
@@ -462,6 +464,19 @@ class OrchestrationTests(unittest.TestCase):
         self.assertNotIn("2–3 个只允许来自用户手动排除", router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
+        for phrase in [
+            "contracts/reviewer-output.schema.json",
+            "先校验 Envelope，再校验每条 Finding",
+            "envelope reviewer 必须等于每条 finding.reviewer",
+            "同一 envelope 内的 local ID 必须唯一",
+            "(reviewer, local_id)",
+            "全局 Finding ID",
+            "required_reviewers 顺序",
+            "原输出顺序",
+            "原子更新 reviewer_results.finding_ids",
+            "所有来源",
+        ]:
+            self.assertIn(phrase, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
             self.assertIn(phrase, risk)
 
@@ -475,7 +490,9 @@ Run: `python tests/review-skill/test_orchestration.py -v`
 
 Expected: FAIL，找不到 `SKILL.md`。
 
-- [ ] **Step 3：写最小主技能**
+- [ ] **Step 3：写 reviewer 输出 Envelope Schema 和最小主技能**
+
+先创建 `contracts/reviewer-output.schema.json`：使用 JSON Schema Draft 2020-12，`additionalProperties=false`，required 精确为 `review_id`、`reviewer`、`findings`、`reviewed_scope`、`limitations`、`report_language`；`review_id` 为非空字符串，`reviewer` 枚举 9 个稳定 ID，`findings.items` 引用 `finding.schema.json`，`reviewed_scope` 和 `limitations` 为字符串数组，`report_language` 固定为 `zh-CN`。
 
 `.agents/skills/multi-agent-review/SKILL.md` 使用以下完整内容：
 
@@ -492,7 +509,7 @@ description: Use when 用户请求审查 Spec、Plan、代码实现、Diff、分
 1. 完整读取 `orchestration/router.md` 和 `orchestration/risk-levels.md`。
 2. 解析用户附带材料；否则依次尝试工作区 Diff、分支变更。无 Git 仓库或目标不明确时先询问。
 3. 构造不可变 Review Packet，读取 `routing/default-routes.yaml`，按风险选择 2、4、最多 6 个 reviewer。用户可手动包含或排除角色。
-4. 对每个角色读取 `reviewers/{reviewer_id}.md` 和 `contracts/finding.schema.json`，使用当前平台的原生能力启动真实独立子代理。每个子代理只接收原始 Packet 和自身角色说明，不能读取其他 reviewer 的 finding。
+4. 对每个角色同时读取 `reviewers/{reviewer_id}.md`、`contracts/reviewer-output.schema.json` 和 `contracts/finding.schema.json`，使用当前平台的原生能力启动真实独立子代理。每个子代理只接收原始 Packet 和自身角色说明，不能读取其他 reviewer 的 finding。
 5. 平台槽位不足时分批执行；后一批仍只接收原始 Packet。无法启动真实独立子代理时停止，不得由主代理模拟多个角色。
 6. 全部 reviewer 完成后，完整读取 `orchestration/chair.md`、`contracts/review-result.schema.json` 和 `templates/review-report.md`，再做校验、去重、冲突处理和汇总。
 
@@ -542,9 +559,9 @@ Route Decision 的 `reason` 必须完整说明目标与默认分支来源、材�
 
 只在全部 reviewer 完成、失败或超时后开始汇总。
 
-1. 按 `contracts/finding.schema.json` 校验。格式错误时只允许原 reviewer 修正格式一次。
+1. 先按 `contracts/reviewer-output.schema.json` 校验 Envelope，再按 `contracts/finding.schema.json` 校验每条 Finding。`envelope reviewer` 必须等于每条 `finding.reviewer`；同一 Envelope 内的 local ID 必须唯一。格式错误时只允许原 reviewer 修正格式一次。
 2. 缺少可核查证据的意见降为 `question` 或丢弃；关键证据不足时整体为 `incomplete`。
-3. 按 claim、location、impact 去重，保留所有独立 evidence 来源。
+3. 允许各 reviewer 使用本地 `F-001…`。以 `(reviewer, local_id)` 为源键，按 Router `required_reviewers` 顺序和各 Envelope 原输出顺序遍历；按 claim、location、impact 去重后分配全局 Finding ID `F-001…`，建立源键到全局 ID 的映射，标注所有 evidence 来源，并原子更新全部 `reviewer_results.finding_ids`。
 4. 不投票。单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。
 5. 无法由证据解决的冲突标记 `needs_human_decision`。
 6. 只有无 blocking、无关键证据缺口、所有必选 reviewer 完成时才允许 `pass`。
@@ -583,7 +600,7 @@ Expected: 3 tests，全部 PASS。
 有效仓库中执行：
 
 ```powershell
-git add .agents/skills/multi-agent-review/SKILL.md .agents/skills/multi-agent-review/orchestration tests/review-skill/test_orchestration.py
+git add .agents/skills/multi-agent-review/contracts/reviewer-output.schema.json .agents/skills/multi-agent-review/SKILL.md .agents/skills/multi-agent-review/orchestration tests/review-skill/test_orchestration.py
 git commit -m "feat: add review orchestration workflow"
 ```
 
@@ -593,6 +610,7 @@ git commit -m "feat: add review orchestration workflow"
 **文件：**
 
 - Create: `tests/review-skill/test_roles.py`
+- Verify: `.agents/skills/multi-agent-review/contracts/reviewer-output.schema.json`
 - Create: `.agents/skills/multi-agent-review/reviewers/requirement-integrity.md`
 - Create: `.agents/skills/multi-agent-review/reviewers/acceptance-criteria.md`
 - Create: `.agents/skills/multi-agent-review/reviewers/plan-feasibility.md`
@@ -605,8 +623,8 @@ git commit -m "feat: add review orchestration workflow"
 
 **接口：**
 
-- Consumes: `reviewers/index.json` 和 `finding.schema.json`。
-- Produces: 9 份互相独立、边界明确的中文角色说明。
+- Consumes: `reviewers/index.json`、`reviewer-output.schema.json` 和 `finding.schema.json`。
+- Produces: 9 份互相独立、边界明确并遵守关闭 Envelope 的中文角色说明。
 
 - [ ] **Step 1：写失败测试**
 
@@ -616,23 +634,60 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REVIEWERS = ROOT / ".agents" / "skills" / "multi-agent-review" / "reviewers"
+SKILL = ROOT / ".agents" / "skills" / "multi-agent-review"
+REVIEWERS = SKILL / "reviewers"
+EXPECTED = {
+    "requirement-integrity": ("需求完整性审查员", "不断追问定义和边界的需求编辑", "目标、用户、范围、非目标、术语、隐藏前提、矛盾和未定义失败行为", "代码风格、具体实现优劣、测试框架选择"),
+    "acceptance-criteria": ("验收标准审查员", "只接受可证伪条件的验收官", "可观察结果、pass/fail 边界、空值、错误、权限、兼容性和 AC 到证据映射", "具体实现方案、抽象设计、命名风格"),
+    "plan-feasibility": ("计划可行性审查员", "关注落地顺序和恢复路径的项目工程师", "依赖、步骤顺序、迁移、兼容、回滚、验证点、未决问题和范围混杂", "重写产品目标、实现阶段的局部代码风格"),
+    "spec-compliance": ("需求符合性审查员", "逐条对照承诺与证据的审计员", "Spec item、AC、实现位置、测试证据、遗漏、部分满足和 plan drift", "擅自扩充或改变需求、纯代码风格"),
+    "correctness-auditor": ("正确性审计员", "对状态和边界保持怀疑的逻辑检查者", "条件、状态转换、异常、空值、并发、幂等、重试、生命周期和资源释放", "纯格式、命名偏好、没有行为影响的重构"),
+    "security-abuse": ("安全与滥用审查员", "从攻击者和越权者视角寻找可利用路径", "认证、对象级授权、租户隔离、输入、注入、路径、secret、日志敏感数据和第三方信任边界", "一般可维护性、无安全影响的样式问题"),
+    "test-skeptic": ("测试证据审查员", "不把“存在测试”等同于“行为已证明”的怀疑者", "弱断言、happy path 偏置、过度 Mock、缺失回归、错误路径、测试与 AC 的对应关系", "与风险无关的测试数量追求、具体生产实现风格"),
+    "integration-contract": ("集成契约审查员", "保护调用双方边界的接口守门人", "API、Schema、事件 payload、错误码、序列化、配置、版本兼容和调用链", "模块内部且不影响契约的局部实现"),
+    "maintainability-pragmatist": ("可维护性审查员", "只保护有现实维护成本的务实维护者", "重复业务规则、复杂度、职责边界、命名歧义、过度抽象和可测试性", "理想化重写、没有成本证据的个人偏好"),
+}
+EVIDENCE = "只报告能引用具体材料、路径、符号、条款或测试证据的问题。证据不足时输出 question，不猜测。"
+OUTPUT = ("只返回符合 `contracts/reviewer-output.schema.json` 的单个 Envelope，包含 "
+          "review_id、reviewer、findings、reviewed_scope、limitations、report_language。"
+          "使用中文；技术标识保持原文。不得修改项目、不得联系其他 reviewer、"
+          "不得执行修复、不得派生子代理。")
+
+def section(text, heading):
+    return text.split(f"## {heading}\n\n", 1)[1].split("\n\n## ", 1)[0].strip()
 
 class RoleTests(unittest.TestCase):
     def test_every_indexed_role_has_a_focused_file(self):
         index = json.loads((REVIEWERS / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual({role["id"] for role in index["reviewers"]}, set(EXPECTED))
         for role in index["reviewers"]:
             path = ROOT / ".agents" / "skills" / "multi-agent-review" / role["role_path"]
             text = path.read_text(encoding="utf-8")
+            name, personality, checks, exclusions = EXPECTED[role["id"]]
             self.assertIn(f"reviewer_id: {role['id']}", text)
-            for heading in ["性格", "只检查", "不检查", "证据要求", "输出"]:
-                self.assertIn(heading, text)
-            self.assertNotIn("修改文件", text.split("## 输出")[-1])
+            self.assertIn(f"# {name}\n", text)
+            self.assertEqual(section(text, "性格"), personality)
+            self.assertEqual(section(text, "只检查"), checks)
+            self.assertEqual(section(text, "不检查"), exclusions)
+            self.assertEqual(section(text, "证据要求"), EVIDENCE)
+            self.assertEqual(section(text, "输出"), OUTPUT)
+            for phrase in ["不得修改项目", "联系其他 reviewer", "执行修复", "不得派生子代理"]:
+                self.assertIn(phrase, section(text, "输出"))
 
     def test_role_focus_is_not_identical(self):
         texts = [p.read_text(encoding="utf-8") for p in REVIEWERS.glob("*.md")]
         self.assertEqual(len(texts), 9)
         self.assertEqual(len(set(texts)), 9)
+        schema_path = SKILL / "contracts" / "reviewer-output.schema.json"
+        self.assertTrue(schema_path.exists(), "缺少 reviewer-output.schema.json")
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(set(schema["required"]), {"review_id", "reviewer", "findings", "reviewed_scope", "limitations", "report_language"})
+        properties = schema["properties"]
+        self.assertEqual(properties["reviewer"]["enum"], sorted(EXPECTED))
+        self.assertEqual(properties["findings"]["items"], {"$ref": "finding.schema.json"})
+        self.assertEqual(properties["report_language"]["const"], "zh-CN")
 
 if __name__ == "__main__":
     unittest.main()
@@ -644,9 +699,19 @@ Run: `python tests/review-skill/test_roles.py -v`
 
 Expected: FAIL，找不到第一个角色文件。
 
-- [ ] **Step 3：分别写入 9 个角色文件**
+- [ ] **Step 3：核对 reviewer 输出 Envelope Schema**
 
-每个文件必须独立包含 YAML Frontmatter `reviewer_id`、以中文名称为一级标题，以及“性格”“只检查”“不检查”“证据要求”“输出”五个二级标题。“证据要求”统一写为“只报告能引用具体材料、路径、符号、条款或测试证据的问题。证据不足时输出 question，不猜测。”；“输出”统一写为“仅返回符合 `contracts/finding.schema.json` 的 findings，以及本角色的检查范围和证据限制。使用中文；技术标识保持原文。不得修改项目、联系其他 reviewer 或执行修复。”。其余字段使用下表的精确内容：
+核对 Task 3 创建的 `contracts/reviewer-output.schema.json`，并精确验证：
+
+- `additionalProperties` 为 `false`。
+- `required` 精确为 `review_id`、`reviewer`、`findings`、`reviewed_scope`、`limitations`、`report_language`。
+- `review_id` 为非空字符串；`reviewer` 枚举 9 个稳定 ID。
+- `findings` 为数组，每项通过 `$ref: finding.schema.json` 引用 Finding Schema。
+- `reviewed_scope` 和 `limitations` 是字符串数组；`report_language` 固定为 `zh-CN`。
+
+- [ ] **Step 4：分别写入 9 个角色文件**
+
+每个文件必须独立包含 YAML Frontmatter `reviewer_id`、以中文名称为一级标题，以及“性格”“只检查”“不检查”“证据要求”“输出”五个二级标题。“证据要求”统一写为“只报告能引用具体材料、路径、符号、条款或测试证据的问题。证据不足时输出 question，不猜测。”；“输出”统一写为“只返回符合 `contracts/reviewer-output.schema.json` 的单个 Envelope，包含 review_id、reviewer、findings、reviewed_scope、limitations、report_language。使用中文；技术标识保持原文。不得修改项目、不得联系其他 reviewer、不得执行修复、不得派生子代理。”。其余字段使用下表的精确内容：
 
 | 文件 | 稳定 ID / 中文名称 | 性格 | 只检查 | 不检查 |
 |---|---|---|---|---|
@@ -660,13 +725,13 @@ Expected: FAIL，找不到第一个角色文件。
 | `integration-contract.md` | `integration-contract` / 集成契约审查员 | 保护调用双方边界的接口守门人 | API、Schema、事件 payload、错误码、序列化、配置、版本兼容和调用链 | 模块内部且不影响契约的局部实现 |
 | `maintainability-pragmatist.md` | `maintainability-pragmatist` / 可维护性审查员 | 只保护有现实维护成本的务实维护者 | 重复业务规则、复杂度、职责边界、命名歧义、过度抽象和可测试性 | 理想化重写、没有成本证据的个人偏好 |
 
-- [ ] **Step 4：运行角色测试并确认 GREEN**
+- [ ] **Step 5：运行角色测试并确认 GREEN**
 
 Run: `python tests/review-skill/test_roles.py -v`
 
 Expected: 2 tests，全部 PASS。
 
-- [ ] **Step 5：提交检查点**
+- [ ] **Step 6：提交检查点**
 
 有效仓库中执行：
 
@@ -689,7 +754,7 @@ git commit -m "feat: add independent reviewer roles"
 
 **接口：**
 
-- Consumes: `reviewers/index.json`、各角色文件和 `finding.schema.json`。
+- Consumes: `reviewers/index.json`、各角色文件、`reviewer-output.schema.json` 和 `finding.schema.json`。
 - Produces: 三端一一对应、继承模型、默认只读的 27 个原生 reviewer 文件，以及 Claude Code 薄技能入口。
 
 - [ ] **Step 1：写失败测试**
@@ -714,6 +779,7 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(data["name"], role_id)
             self.assertEqual(data["sandbox_mode"], "read-only")
             self.assertIn(f"reviewers/{role_id}.md", data["developer_instructions"])
+            self.assertIn("contracts/reviewer-output.schema.json", data["developer_instructions"])
 
     def test_cursor_adapters_are_read_only_and_inherit_model(self):
         for role_id in ROLE_IDS:
@@ -722,6 +788,7 @@ class AdapterTests(unittest.TestCase):
             self.assertIn("model: inherit", text)
             self.assertIn("readonly: true", text)
             self.assertIn(f"reviewers/{role_id}.md", text)
+            self.assertIn("contracts/reviewer-output.schema.json", text)
 
     def test_claude_adapters_only_have_read_tools(self):
         for role_id in ROLE_IDS:
@@ -729,6 +796,7 @@ class AdapterTests(unittest.TestCase):
             self.assertIn(f"name: {role_id}", text)
             self.assertIn("tools: Read, Glob, Grep", text)
             self.assertIn("permissionMode: plan", text)
+            self.assertIn("contracts/reviewer-output.schema.json", text)
             self.assertNotIn("tools: Agent", text)
 
     def test_generator_is_in_sync(self):
@@ -766,10 +834,12 @@ INDEX = ROOT / ".agents" / "skills" / "multi-agent-review" / "reviewers" / "inde
 
 def common_instructions(role_id: str) -> str:
     return (
-        f"开始前完整读取 `.agents/skills/multi-agent-review/reviewers/{role_id}.md` 和 "
+        f"开始前完整读取 `.agents/skills/multi-agent-review/reviewers/{role_id}.md`、"
+        "`.agents/skills/multi-agent-review/contracts/reviewer-output.schema.json` 和 "
         "`.agents/skills/multi-agent-review/contracts/finding.schema.json`。只审查父代理提供的原始 Review Packet；"
-        "不能读取其他 reviewer 的 findings。使用中文返回结构化 findings、检查范围和证据限制。"
-        "不得修改文件、执行状态变更命令、联系其他 reviewer 或实施修复。"
+        "不能读取其他 reviewer 的 findings。使用中文返回符合 reviewer-output Schema 的单个 Envelope，"
+        "包含 review_id、reviewer、findings、reviewed_scope、limitations、report_language。"
+        "不得修改文件、执行状态变更命令、联系其他 reviewer、派生子代理或实施修复。"
     )
 
 def render_codex(role: dict) -> str:
