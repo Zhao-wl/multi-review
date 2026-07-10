@@ -43,6 +43,23 @@ class OrchestrationTests(unittest.TestCase):
         )
         for phrase in ["Review Packet", "无 Git 仓库", "少于两个 reviewer", "分批"]:
             self.assertIn(phrase, router)
+        for phrase in [
+            "当前分支相对默认分支",
+            "本地 origin/HEAD",
+            "仓库配置",
+            "明确存在的 main 或 master",
+            "不能用同名 upstream 代替默认分支",
+            "review_id",
+            "每次审查唯一",
+            "重试沿用同一值",
+            "requested_reviewers 与 excluded_reviewers 有交集时停止并询问用户",
+            "移除 excluded_reviewers，再按自动默认数量选取，后续候选负责补位",
+            "按用户给定顺序追加到自动集合，不占自动默认名额",
+            "超过 6 时停止并询问用户缩减，不启动 reviewer",
+            "覆盖缩减",
+            "排除项",
+        ]:
+            self.assertIn(phrase, router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:

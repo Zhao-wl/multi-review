@@ -435,6 +435,23 @@ class OrchestrationTests(unittest.TestCase):
         risk = (SKILL / "orchestration" / "risk-levels.md").read_text(encoding="utf-8")
         for phrase in ["Review Packet", "无 Git 仓库", "少于两个 reviewer", "分批"]:
             self.assertIn(phrase, router)
+        for phrase in [
+            "当前分支相对默认分支",
+            "本地 origin/HEAD",
+            "仓库配置",
+            "明确存在的 main 或 master",
+            "不能用同名 upstream 代替默认分支",
+            "review_id",
+            "每次审查唯一",
+            "重试沿用同一值",
+            "requested_reviewers 与 excluded_reviewers 有交集时停止并询问用户",
+            "移除 excluded_reviewers，再按自动默认数量选取，后续候选负责补位",
+            "按用户给定顺序追加到自动集合，不占自动默认名额",
+            "超过 6 时停止并询问用户缩减，不启动 reviewer",
+            "覆盖缩减",
+            "排除项",
+        ]:
+            self.assertIn(phrase, router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
@@ -476,7 +493,20 @@ description: Use when 用户请求审查 Spec、Plan、代码实现、Diff、分
 
 - [ ] **Step 4：写 Router 协议**
 
-`router.md` 必须逐条定义：目标解析顺序；`artifact_type/risk/targets/changed_files/requirements/acceptance_criteria/test_evidence/constraints/excluded_scope/requested_reviewers/excluded_reviewers/evidence_rules` Packet 字段；风险路由；手动覆盖；少于两个 reviewer 的确认门槛；无 Git 仓库处理；并发不足时分批且不共享 finding；派遣理由输出。
+`router.md` 必须逐条定义：目标解析顺序；`review_id/artifact_type/risk/targets/changed_files/requirements/acceptance_criteria/test_evidence/constraints/excluded_scope/requested_reviewers/excluded_reviewers/evidence_rules` Packet 字段；风险路由；手动覆盖；少于两个 reviewer 的确认门槛；无 Git 仓库处理；并发不足时分批且不共享 finding；派遣理由输出。`review_id` 每次审查唯一，执行重试与格式重排沿用同一值。
+
+分支目标必须相对默认分支；按本地 `origin/HEAD`、仓库配置、明确存在的 `main` 或 `master` 依次识别。无法可靠确定时询问用户，不能用同名 upstream 代替默认分支。
+
+手动路由只使用以下算法：
+
+1. 先验证 reviewer ID；`requested_reviewers` 与 `excluded_reviewers` 有交集时停止并询问。
+2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位。
+3. requested reviewer 按用户给定顺序追加到自动集合，不占自动默认名额，按首次出现去重。
+4. 最终数量超出当前风险上限时，提高到能容纳的最低风险；超过 6 时停止并询问用户缩减，不启动 reviewer。
+5. 合法最终数量为 2–3 且低于最终风险自动默认数量时，在 `reason` 明确记录“覆盖缩减”及排除项。
+6. 少于两个 reviewer 时沿用确认、降级覆盖与最终 `incomplete` 规则。
+
+Route Decision 的 `reason` 必须完整说明目标与默认分支来源、风险信号、排除项、自动集合及补位、requested 追加与去重、风险提升、最终角色顺序与数量、覆盖缩减或降级覆盖，以及批次安排。
 
 结尾加入以下硬规则：
 
@@ -485,6 +515,9 @@ description: Use when 用户请求审查 Spec、Plan、代码实现、Diff、分
 
 - Review Packet 创建后不得因任何 reviewer 的输出而修改。
 - 用户未指定材料且无 Git 仓库时，询问目标，不猜测。
+- 无法可靠识别默认分支时询问用户，不能用同名 upstream 代替默认分支。
+- `requested_reviewers` 与 `excluded_reviewers` 有交集时停止并询问用户。
+- 最终数量超过 6 时停止并询问用户缩减，不启动 reviewer。
 - 排除后少于两个 reviewer 时，必须说明异构覆盖不足并等待确认。
 - 分批执行时，后续批次不能收到前一批 findings。
 - 路由完成前不启动任何 reviewer。

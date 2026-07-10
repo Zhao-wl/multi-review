@@ -119,6 +119,8 @@ Router 和 Chair 由主代理承担，不额外占用子代理并发额度。Rev
 3. 当前分支相对默认分支的变更。
 4. 无法确定或当前目录不是 Git 仓库时，询问用户。
 
+默认分支按顺序从本地 `origin/HEAD`、仓库配置、明确存在的 `main` 或 `master` 识别。无法可靠确定时询问用户；不能把当前分支的同名 upstream 当作默认分支。
+
 支持的意图包括：审查指定 Spec、Plan、Diff、分支、文件路径，以及手动包含或排除 reviewer。具体语法不绑定任何平台的专有命令解析器。
 
 主代理在派遣前构造不可变 Packet：
@@ -138,6 +140,8 @@ requested_reviewers: []
 excluded_reviewers: []
 evidence_rules: strict
 ```
+
+`review_id` 每次审查唯一；同一次审查的执行重试与格式重排沿用同一值。
 
 每个 reviewer 收到同一份基础 Packet，再附加且仅附加自己的角色说明。任何 reviewer 都不能读取其他 reviewer 的 finding。
 
@@ -160,7 +164,16 @@ evidence_rules: strict
 
 Router 必须在派遣前一次确定完整 reviewer 集合。平台并发槽位不足时分批运行；后一批仍然只接收原始 Packet，不能接收前一批 findings。主代理等待全部 reviewer 完成后才开始 Chair 汇总。
 
-用户手动指定的 reviewer 优先于默认组合。手动排除后仍有至少两个 reviewer 时可以生成有效 Route Decision；低于该风险的自动路由默认数量时，结果必须标明覆盖不足。排除后少于两个 reviewer 时不能生成有效 Route Decision，必须提示异构覆盖不足并等待用户确认；确认后应补足到至少两个 reviewer。用户确认以少于两个 reviewer 继续时属于降级覆盖，不能伪装为正常有效路由，最终状态必须标记为 `incomplete`。
+手动路由使用唯一算法：
+
+1. 先验证 `requested_reviewers` 与 `excluded_reviewers` 的 ID；两者有交集时停止并询问用户。
+2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位。
+3. `requested_reviewers` 按用户给定顺序追加到自动集合，不占自动默认名额，并按首次出现去重。
+4. 最终数量超出当前风险上限时，提高到能容纳的最低风险；超过 6 时停止并询问用户缩减，不启动 reviewer。
+5. 合法最终数量为 2–3 且低于最终风险的自动默认数量时，Route Decision 的 `reason` 必须明确记录“覆盖缩减”及排除项。
+6. 少于两个 reviewer 时不能生成有效 Route Decision，必须提示异构覆盖不足并等待用户确认；确认后应补足到至少两个 reviewer。用户坚持以少于两个 reviewer 继续时属于降级覆盖，不能伪装为正常有效路由，最终状态必须标记为 `incomplete`。
+
+Route Decision 的 `reason` 完整记录目标与默认分支来源、风险信号、排除项、自动集合及补位、requested 追加与去重、风险提升、最终角色顺序与数量、覆盖缩减或降级覆盖，以及批次安排。
 
 ## 7. Finding 与汇总契约
 
