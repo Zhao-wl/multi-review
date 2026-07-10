@@ -54,7 +54,7 @@ Router 在派遣前一次性解析目标、建立不可变 Review Packet、确�
 
 ## 派遣与失败处理
 
-为每个已选角色读取 reviewers/{reviewer_id}.md，使用平台原生能力启动真实独立子代理。每个子代理只接收不可变 Review Packet、自身角色说明和 contracts/finding.schema.json，不能读取其他 reviewer 的 findings。
+为每个已选角色读取 reviewers/{reviewer_id}.md，使用平台原生能力启动真实独立子代理。派遣输入固定为原始 Review Packet、自身角色说明、contracts/reviewer-output.schema.json 和 contracts/finding.schema.json。任何 reviewer 不接收其他 reviewer 的输出，包括 Envelope、findings、reviewed_scope 或 limitations。
 
 平台并发槽位不足时可以分批，但完整角色集合不得改变，后一批不能收到前一批 findings。必选 reviewer 执行失败或超时最多重试一次；仍失败时记录限制，最终状态为 incomplete。无法启动真实独立子代理时停止，主代理不得模拟多个 reviewer。
 

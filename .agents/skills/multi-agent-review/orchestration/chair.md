@@ -2,13 +2,22 @@
 
 只在全部 reviewer 完成、失败或超时后开始汇总。
 
-1. 先按 contracts/reviewer-output.schema.json 校验 Envelope，再按 contracts/finding.schema.json 校验每条 Finding，即“先校验 Envelope，再校验每条 Finding”。envelope reviewer 必须等于每条 finding.reviewer；同一 envelope 内的 local ID 必须唯一。格式错误时只允许原 reviewer 修正格式一次；不得由 Chair 或其他 reviewer 代写。重排后仍无效则将该 reviewer 标为 invalid，必选 reviewer 因此缺失时整体为 incomplete。
+1. 先做派遣上下文等值校验：Envelope.review_id 必须等于 Review Packet.review_id；Envelope.reviewer 必须等于实际派遣 reviewer ID。两项通过后，先按 contracts/reviewer-output.schema.json 校验 Envelope，再按 contracts/finding.schema.json 校验每条 Finding，即“先校验 Envelope，再校验每条 Finding”。envelope reviewer 必须等于每条 finding.reviewer；同一 envelope 内的 local ID 必须唯一。任一等值或格式校验失败时，只允许实际原 reviewer 修正一次；不得由 Chair 或其他 reviewer 代写。仍失败则将该 reviewer 标为 invalid，必选 reviewer 因此缺失时整体为 incomplete。
 2. 缺少可核查证据的意见降为 question 或丢弃；关键证据不足时整体为 incomplete。
 3. 允许各 reviewer 在自身 Envelope 中使用本地 `F-001…`。聚合时以 `(reviewer, local_id)` 为源键，先按 Router 的 required_reviewers 顺序，再按各 Envelope 的原输出顺序遍历；按 claim、location、impact 去重，以首次出现者为规范项并分配全局 Finding ID `F-001…`。建立每个源键到全局 ID 的映射，并原子更新 reviewer_results.finding_ids；合并 evidence 时标注所有来源。
 4. 不投票，不使用多数结论。单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。
 5. 无法由证据解决的冲突标记 needs_human_decision。
 6. 只有无 blocking、无关键证据缺口、所有必选 reviewer 完成时才允许 pass。
 7. 使用 templates/review-report.md 输出中文报告；路径、代码符号、API、配置键和 reviewer ID 保持原文。
+
+## 本地 ID 碰撞场景
+
+两个不同 reviewer 都返回 local F-001 时，源键仍分别为 `(reviewer, F-001)`，按 required_reviewers 顺序确定全局映射：
+
+| 场景 | 第一个 reviewer 的映射 | 第二个 reviewer 的映射 |
+|---|---|---|
+| 不同去重组 | local F-001 → global F-001 | local F-001 → global F-002 |
+| 同一去重组 | local F-001 → global F-001 | local F-001 → 同一 global ID（global F-001） |
 
 ## 状态决策
 

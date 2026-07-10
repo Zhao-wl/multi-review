@@ -461,6 +461,14 @@ class OrchestrationTests(unittest.TestCase):
             "排除项",
         ]:
             self.assertIn(phrase, router)
+        for phrase in [
+            "contracts/reviewer-output.schema.json",
+            "contracts/finding.schema.json",
+            "原始 Review Packet",
+            "自身角色说明",
+            "任何 reviewer 不接收其他 reviewer 的输出",
+        ]:
+            self.assertIn(phrase, router)
         self.assertNotIn("2–3 个只允许来自用户手动排除", router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
@@ -475,6 +483,15 @@ class OrchestrationTests(unittest.TestCase):
             "原输出顺序",
             "原子更新 reviewer_results.finding_ids",
             "所有来源",
+            "Envelope.review_id 必须等于 Review Packet.review_id",
+            "Envelope.reviewer 必须等于实际派遣 reviewer ID",
+            "实际原 reviewer",
+            "两个不同 reviewer 都返回 local F-001",
+            "不同去重组",
+            "global F-001",
+            "global F-002",
+            "同一去重组",
+            "同一 global ID",
         ]:
             self.assertIn(phrase, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
@@ -535,6 +552,8 @@ description: Use when 用户请求审查 Spec、Plan、代码实现、Diff、分
 
 Route Decision 的 `reason` 必须完整说明目标与默认分支来源、材料固有风险、排除项、自动集合及补位、requested 追加与去重、容纳数量所需风险、有效风险、最终角色顺序与数量、手动扩展、覆盖缩减或降级覆盖，以及批次安排。
 
+每次派遣输入固定为原始 Review Packet、自身角色说明、`contracts/reviewer-output.schema.json` 和 `contracts/finding.schema.json`。任何 reviewer 不接收其他 reviewer 的 Envelope、findings、reviewed_scope 或 limitations。
+
 结尾加入以下硬规则：
 
 ```markdown
@@ -559,13 +578,15 @@ Route Decision 的 `reason` 必须完整说明目标与默认分支来源、材�
 
 只在全部 reviewer 完成、失败或超时后开始汇总。
 
-1. 先按 `contracts/reviewer-output.schema.json` 校验 Envelope，再按 `contracts/finding.schema.json` 校验每条 Finding。`envelope reviewer` 必须等于每条 `finding.reviewer`；同一 Envelope 内的 local ID 必须唯一。格式错误时只允许原 reviewer 修正格式一次。
+1. 先做派遣上下文等值校验：`Envelope.review_id` 必须等于 `Review Packet.review_id`；`Envelope.reviewer` 必须等于实际派遣 reviewer ID。两项通过后，先按 `contracts/reviewer-output.schema.json` 校验 Envelope，再按 `contracts/finding.schema.json` 校验每条 Finding。`envelope reviewer` 必须等于每条 `finding.reviewer`；同一 Envelope 内的 local ID 必须唯一。任一等值或格式校验失败时只允许实际原 reviewer 修正一次；仍失败则标为 `invalid`，必选 reviewer 因此缺失时整体为 `incomplete`。
 2. 缺少可核查证据的意见降为 `question` 或丢弃；关键证据不足时整体为 `incomplete`。
 3. 允许各 reviewer 使用本地 `F-001…`。以 `(reviewer, local_id)` 为源键，按 Router `required_reviewers` 顺序和各 Envelope 原输出顺序遍历；按 claim、location、impact 去重后分配全局 Finding ID `F-001…`，建立源键到全局 ID 的映射，标注所有 evidence 来源，并原子更新全部 `reviewer_results.finding_ids`。
 4. 不投票。单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。
 5. 无法由证据解决的冲突标记 `needs_human_decision`。
 6. 只有无 blocking、无关键证据缺口、所有必选 reviewer 完成时才允许 `pass`。
 7. 使用 `templates/review-report.md` 输出中文报告。
+
+两个不同 reviewer 都返回 local `F-001` 时，必须包含以下映射场景表：不同去重组按 `required_reviewers` 顺序映射为 global `F-001` / global `F-002`；同一去重组的两个源键都映射同一 global ID。
 
 内部状态映射：`pass`=通过，`needs_changes`=需要修改，`needs_human_decision`=需要人工决策，`incomplete`=审查不完整。
 内部严重度映射：`blocking`=阻塞问题，`advisory`=建议问题，`question`=待确认问题。
@@ -625,6 +646,8 @@ git commit -m "feat: add review orchestration workflow"
 
 - Consumes: `reviewers/index.json`、`reviewer-output.schema.json` 和 `finding.schema.json`。
 - Produces: 9 份互相独立、边界明确并遵守关闭 Envelope 的中文角色说明。
+
+运行时角色使用 Router 传入的 `Review Packet.review_id` 和实际派遣 reviewer ID 填写 Envelope 的 `review_id` 与 `reviewer`；这两个字段不是 reviewer 可自由选择的值，并由 Task 3 的 Chair 做等值校验。
 
 - [ ] **Step 1：写失败测试**
 
@@ -1000,17 +1023,26 @@ Expected:
 
 Expected: 第一条仍要求证据；第二条先提示少于两个 reviewer 的异构覆盖不足并等待确认，不直接运行单代理。
 
-- [ ] **Step 5：确认默认只读**
+- [ ] **Step 5：验证真实本地 ID 碰撞与 Chair 映射**
+
+用真实独立 reviewer 运行两个受控场景，并保存 Router 的 `required_reviewers`、两个原始 Envelope、源键映射和最终报告；不得改写 reviewer 原始输出或手工构造碰撞：
+
+1. 对 `implementation-retry.md` 仅保留 `correctness-auditor` 与 `test-skeptic`，验证两个 reviewer 都以 local `F-001` 报告不同问题时，Chair 按 `required_reviewers` 顺序映射为 global `F-001` 和 global `F-002`。
+2. 对 `implementation-auth.md` 仅保留 `security-abuse` 与 `spec-compliance`，验证两个 reviewer 都以 local `F-001` 报告同一对象级授权缺口并进入同一去重组时，两个 `(reviewer, local_id)` 源键映射同一 global ID。
+
+Expected: 两个场景都必须展示真实子代理标识、相同 local ID、去重组判定、完整源键到全局 ID 映射，以及原子更新后的 `reviewer_results.finding_ids`。若原始 Envelope 未真实产生所需碰撞，记录本场景证据不足并将评估标为不完整，不得把预期映射伪装成实测结果。
+
+- [ ] **Step 6：确认默认只读**
 
 再次运行 Step 1 的哈希命令。
 
 Expected: 除本任务明确创建的 `skill-evaluation.md` 外，Task 1–5 生产文件和 fixture 哈希均未改变。
 
-- [ ] **Step 6：写入真实评估记录**
+- [ ] **Step 7：写入真实评估记录**
 
-`skill-evaluation.md` 先记录 10 次微测试的逐次判定和控制组对比，再按场景记录子代理标识、Router 选择和理由、中文报告状态、关键 finding、未满足项、哈希对照。只能写实际观察结果；不能把上面的 Expected 复制成“已通过”。
+`skill-evaluation.md` 先记录 10 次微测试的逐次判定和控制组对比，再按场景记录子代理标识、Router 选择和理由、中文报告状态、关键 finding、本地 ID 碰撞的原始 Envelope 与全局映射、未满足项、哈希对照。只能写实际观察结果；不能把上面的 Expected 复制成“已通过”。
 
-- [ ] **Step 7：提交检查点**
+- [ ] **Step 8：提交检查点**
 
 有效仓库中执行：
 

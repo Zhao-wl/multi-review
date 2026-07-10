@@ -191,7 +191,9 @@ limitations: []                      # 证据限制，字符串数组
 report_language: zh-CN
 ```
 
-Envelope 不接受未声明字段。Chair 必须先校验 Envelope，再校验其中每条 Finding；`envelope reviewer` 必须等于每条 `finding.reviewer`，同一 Envelope 内本地 Finding ID 必须唯一。格式错误只允许原 reviewer 重排一次。
+Envelope 不接受未声明字段。Router 给每个 reviewer 的派遣输入固定为原始 Review Packet、自身角色说明、`reviewer-output.schema.json` 和 `finding.schema.json`，不包含任何其他 reviewer 输出。
+
+Chair 先校验可信派遣上下文：`Envelope.review_id` 必须等于 `Review Packet.review_id`，`Envelope.reviewer` 必须等于实际派遣 reviewer ID。两项通过后才先校验 Envelope、再校验其中每条 Finding；`envelope reviewer` 必须等于每条 `finding.reviewer`，同一 Envelope 内本地 Finding ID 必须唯一。任一绑定或格式校验失败只允许实际原 reviewer 修正一次；仍失败则标为 `invalid`，必选 reviewer 因此缺失时整体为 `incomplete`。
 
 每条有效 Finding 必须满足：
 
@@ -238,6 +240,13 @@ Chair 的处理规则：
 - Reviewer 冲突标记为 `needs_human_decision`，不投票。
 - 没有可核查证据的意见降为 `question` 或丢弃。
 - 单个高置信度 blocking finding 不因其他 reviewer 沉默而消失。
+
+两个不同 reviewer 都返回 local `F-001` 时，源键保持隔离并按 `required_reviewers` 顺序映射：
+
+| 场景 | 第一个 reviewer | 第二个 reviewer |
+|---|---|---|
+| 不同去重组 | local `F-001` → global `F-001` | local `F-001` → global `F-002` |
+| 同一去重组 | local `F-001` → global `F-001` | local `F-001` → 同一 global ID（global `F-001`） |
 
 最终状态限定为：
 

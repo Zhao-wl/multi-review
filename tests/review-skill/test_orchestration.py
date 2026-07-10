@@ -68,6 +68,14 @@ class OrchestrationTests(unittest.TestCase):
             "排除项",
         ]:
             self.assertIn(phrase, router)
+        for phrase in [
+            "contracts/reviewer-output.schema.json",
+            "contracts/finding.schema.json",
+            "原始 Review Packet",
+            "自身角色说明",
+            "任何 reviewer 不接收其他 reviewer 的输出",
+        ]:
+            self.assertIn(phrase, router)
         self.assertNotIn("2–3 个只允许来自用户手动排除", router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
@@ -82,6 +90,15 @@ class OrchestrationTests(unittest.TestCase):
             "原输出顺序",
             "原子更新 reviewer_results.finding_ids",
             "所有来源",
+            "Envelope.review_id 必须等于 Review Packet.review_id",
+            "Envelope.reviewer 必须等于实际派遣 reviewer ID",
+            "实际原 reviewer",
+            "两个不同 reviewer 都返回 local F-001",
+            "不同去重组",
+            "global F-001",
+            "global F-002",
+            "同一去重组",
+            "同一 global ID",
         ]:
             self.assertIn(phrase, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
