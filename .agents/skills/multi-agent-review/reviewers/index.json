@@ -1,0 +1,13 @@
+{
+  "reviewers": [
+    {"id":"requirement-integrity","display_name":"需求完整性审查员","description":"检查目标、用户、范围、非目标、术语和隐藏前提。","stages":["spec","plan"],"role_path":"reviewers/requirement-integrity.md"},
+    {"id":"acceptance-criteria","display_name":"验收标准审查员","description":"把模糊愿望检查为可观察、可测试、可判定条件。","stages":["spec","plan"],"role_path":"reviewers/acceptance-criteria.md"},
+    {"id":"plan-feasibility","display_name":"计划可行性审查员","description":"检查依赖、顺序、迁移、回滚和验证点。","stages":["plan"],"role_path":"reviewers/plan-feasibility.md"},
+    {"id":"spec-compliance","display_name":"需求符合性审查员","description":"逐条核对 Spec、实现和测试证据。","stages":["implementation","mixed"],"role_path":"reviewers/spec-compliance.md"},
+    {"id":"correctness-auditor","display_name":"正确性审计员","description":"检查条件、状态、异常、并发、幂等和生命周期。","stages":["implementation","mixed"],"role_path":"reviewers/correctness-auditor.md"},
+    {"id":"security-abuse","display_name":"安全与滥用审查员","description":"从攻击者角度检查认证、授权、输入和敏感数据。","stages":["spec","plan","implementation","mixed"],"role_path":"reviewers/security-abuse.md"},
+    {"id":"test-skeptic","display_name":"测试证据审查员","description":"检查弱断言、过度 Mock、回归缺口和测试与 AC 的对应关系。","stages":["plan","implementation","mixed"],"role_path":"reviewers/test-skeptic.md"},
+    {"id":"integration-contract","display_name":"集成契约审查员","description":"检查 API、Schema、事件、配置、版本兼容和调用边界。","stages":["spec","plan","implementation","mixed"],"role_path":"reviewers/integration-contract.md"},
+    {"id":"maintainability-pragmatist","display_name":"可维护性审查员","description":"务实检查重复规则、复杂度、职责边界和可测试性。","stages":["implementation","mixed"],"role_path":"reviewers/maintainability-pragmatist.md"}
+  ]
+}
