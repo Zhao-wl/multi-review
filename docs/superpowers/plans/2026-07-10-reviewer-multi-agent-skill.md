@@ -448,10 +448,18 @@ class OrchestrationTests(unittest.TestCase):
             "移除 excluded_reviewers，再按自动默认数量选取，后续候选负责补位",
             "按用户给定顺序追加到自动集合，不占自动默认名额",
             "超过 6 时停止并询问用户缩减，不启动 reviewer",
+            "材料固有风险",
+            "容纳最终数量所需最低风险",
+            "较高者",
+            "手动扩展",
             "覆盖缩减",
+            "两者可以同时记录",
+            "low + 1 requested",
+            "medium=3",
             "排除项",
         ]:
             self.assertIn(phrase, router)
+        self.assertNotIn("2–3 个只允许来自用户手动排除", router)
         for value in ["pass", "needs_changes", "needs_human_decision", "incomplete"]:
             self.assertIn(value, chair)
         for phrase in ["低风险：2", "中风险：4", "高风险：最多 6"]:
@@ -500,13 +508,15 @@ description: Use when 用户请求审查 Spec、Plan、代码实现、Diff、分
 手动路由只使用以下算法：
 
 1. 先验证 reviewer ID；`requested_reviewers` 与 `excluded_reviewers` 有交集时停止并询问。
-2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位。
+2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位；自动默认数量取材料固有风险对应的数量。
 3. requested reviewer 按用户给定顺序追加到自动集合，不占自动默认名额，按首次出现去重。
-4. 最终数量超出当前风险上限时，提高到能容纳的最低风险；超过 6 时停止并询问用户缩减，不启动 reviewer。
-5. 合法最终数量为 2–3 且低于最终风险自动默认数量时，在 `reason` 明确记录“覆盖缩减”及排除项。
+4. 超过 6 时停止并询问用户缩减，不启动 reviewer。数量为 2–6 时，有效风险取材料固有风险与容纳最终数量所需最低风险的较高者。
+5. requested 使最终数量高于自动集合时，在 `reason` 记录“手动扩展”及追加角色；excluded 使最终数量低于有效风险自动默认数量时，记录“覆盖缩减”及排除项；两者可以同时记录。
 6. 少于两个 reviewer 时沿用确认、降级覆盖与最终 `incomplete` 规则。
 
-Route Decision 的 `reason` 必须完整说明目标与默认分支来源、风险信号、排除项、自动集合及补位、requested 追加与去重、风险提升、最终角色顺序与数量、覆盖缩减或降级覆盖，以及批次安排。
+`low + 1 requested` 得到 3 人时，有效风险为 `medium`，`medium=3` 合法；`reason` 记录“手动扩展”及追加角色。没有 excluded 时不记录“覆盖缩减”，也不要求不存在的排除项。
+
+Route Decision 的 `reason` 必须完整说明目标与默认分支来源、材料固有风险、排除项、自动集合及补位、requested 追加与去重、容纳数量所需风险、有效风险、最终角色顺序与数量、手动扩展、覆盖缩减或降级覆盖，以及批次安排。
 
 结尾加入以下硬规则：
 
@@ -555,7 +565,11 @@ Route Decision 的 `reason` 必须完整说明目标与默认分支来源、风�
 - 中风险：4 个 reviewer。普通业务逻辑、多文件重构、测试或接口调整。
 - 高风险：最多 6 个 reviewer。权限、支付、迁移、存档、CI/CD、外部集成、发布或关键性能路径。
 
-风险取最高适用等级。用户可以增加 reviewer；减少到两个以下必须再次确认。平台并发上限只改变批次，不改变 Router 已选角色集合。
+先按材料内容判定材料固有风险。容纳最终数量所需最低风险为：2 人对应 low，3–4 人对应 medium，5–6 人对应 high。有效风险取材料固有风险与容纳最终数量所需最低风险的较高者。
+
+正常 Route Decision 范围为 low=2、medium=2–4、high=2–6。requested 使最终数量高于自动集合时，reason 记录“手动扩展”及追加角色；excluded 使最终数量低于有效风险自动默认数量时，reason 记录“覆盖缩减”及排除项；两者可以同时记录。`low + 1 requested` 得到合法 `medium=3`，没有 excluded 时不记录“覆盖缩减”。
+
+用户可以增加 reviewer；减少到两个以下必须再次确认。平台并发上限只改变批次，不改变 Router 已选角色集合。
 ```
 
 - [ ] **Step 7：运行测试并确认 GREEN**

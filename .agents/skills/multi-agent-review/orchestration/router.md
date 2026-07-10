@@ -31,22 +31,24 @@ Router 在派遣前一次性解析目标、建立不可变 Review Packet、确�
 
 ## 风险路由
 
-完整读取 routing/default-routes.yaml，按 artifact_type 的有序角色列表选择角色，并结合 orchestration/risk-levels.md 取最高适用风险：
+完整读取 routing/default-routes.yaml，按 artifact_type 的有序角色列表选择角色，并结合 orchestration/risk-levels.md 判定材料固有风险：
 
 - low 自动选择 2 个，正常 Route Decision 必须恰好 2 个。
-- medium 自动选择 4 个，正常 Route Decision 为 2–4 个；2–3 个只允许来自用户手动排除后的有效路由。
+- medium 自动选择 4 个，正常 Route Decision 为 2–4 个。
 - high 自动选择最多 6 个，正常 Route Decision 为 2–6 个。
 
 手动路由严格按以下顺序执行：
 
 1. 先用 reviewers/index.json 验证 requested_reviewers 与 excluded_reviewers 的 ID。存在未知 ID 时停止并询问用户修正；requested_reviewers 与 excluded_reviewers 有交集时停止并询问用户。
-2. 从 artifact_type 对应的默认有序路由移除 excluded_reviewers，再按自动默认数量选取，后续候选负责补位；不得因前部角色被排除而提前缩小自动集合。
+2. 从 artifact_type 对应的默认有序路由移除 excluded_reviewers，再按自动默认数量选取，后续候选负责补位；自动默认数量取材料固有风险对应的数量，不得因前部角色被排除而提前缩小自动集合。
 3. requested reviewer 按用户给定顺序追加到自动集合，不占自动默认名额；与自动集合或自身重复的 ID 只保留首次出现。
-4. 若最终数量超出当前风险上限，提高到能容纳该数量的最低风险。最终数量超过 6 时停止并询问用户缩减，不启动 reviewer。
-5. 合法最终数量为 2–3 且低于最终风险的自动默认数量时，Route Decision 的 reason 必须明确记录“覆盖缩减”及 excluded_reviewers 排除项。
+4. 最终数量超过 6 时停止并询问用户缩减，不启动 reviewer。数量为 2–6 时，先求容纳最终数量所需最低风险，再取材料固有风险与该最低风险的较高者作为有效风险。
+5. requested_reviewers 使最终数量高于自动集合时，reason 必须记录“手动扩展”及实际追加角色。excluded_reviewers 使最终数量低于有效风险的自动默认数量时，reason 必须记录“覆盖缩减”及排除项。两者可以同时记录。
 6. 最终集合少于两个 reviewer 时，应用下述确认与降级规则。
 
 完成全部步骤后才一次性确定完整角色集合。不得自行移除角色或豁免风险。
+
+例如，材料固有风险为 low、自动集合为 2 人时，low + 1 requested 得到 3 人；有效风险提升为 medium，medium=3 是合法 Route Decision，reason 记录“手动扩展”及追加角色。若没有 excluded_reviewers，不记录“覆盖缩减”，也不要求不存在的排除项。
 
 如果用户排除后只剩少于两个 reviewer，先说明异构覆盖不足并等待用户确认。用户坚持并确认后，只能记录为“降级覆盖”，不得生成伪装为正常有效路由的 Route Decision；可以按确认集合派遣，但最终状态强制为 incomplete。
 
@@ -58,7 +60,7 @@ Router 在派遣前一次性解析目标、建立不可变 Review Packet、确�
 
 ## Route Decision 输出
 
-在派遣前输出并冻结 artifact_type、risk、required_reviewers 与 reason。reason 必须用中文完整说明目标来源与默认分支识别来源、风险信号、排除项、自动集合及补位、requested 追加与去重、风险提升、最终角色顺序与数量、是否覆盖缩减或降级覆盖，以及是否需要分批；技术标识保持原文。
+在派遣前输出并冻结 artifact_type、risk、required_reviewers 与 reason。reason 必须用中文完整说明目标来源与默认分支识别来源、材料固有风险、排除项、自动集合及补位、requested 追加与去重、容纳数量所需风险、有效风险、最终角色顺序与数量、手动扩展、覆盖缩减或降级覆盖，以及是否需要分批；技术标识保持原文。
 
 ## 硬规则
 

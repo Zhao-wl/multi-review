@@ -167,13 +167,15 @@ Router 必须在派遣前一次确定完整 reviewer 集合。平台并发槽位
 手动路由使用唯一算法：
 
 1. 先验证 `requested_reviewers` 与 `excluded_reviewers` 的 ID；两者有交集时停止并询问用户。
-2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位。
+2. 从 artifact 默认有序路由移除 `excluded_reviewers`，再按自动默认数量选取，后续候选负责补位；自动默认数量取材料固有风险对应的数量。
 3. `requested_reviewers` 按用户给定顺序追加到自动集合，不占自动默认名额，并按首次出现去重。
-4. 最终数量超出当前风险上限时，提高到能容纳的最低风险；超过 6 时停止并询问用户缩减，不启动 reviewer。
-5. 合法最终数量为 2–3 且低于最终风险的自动默认数量时，Route Decision 的 `reason` 必须明确记录“覆盖缩减”及排除项。
+4. 超过 6 时停止并询问用户缩减，不启动 reviewer。数量为 2–6 时，有效风险取材料固有风险与容纳最终数量所需最低风险的较高者。
+5. requested 使最终数量高于自动集合时，Route Decision 的 `reason` 记录“手动扩展”及追加角色；excluded 使最终数量低于有效风险的自动默认数量时，记录“覆盖缩减”及排除项；两者可以同时记录。
 6. 少于两个 reviewer 时不能生成有效 Route Decision，必须提示异构覆盖不足并等待用户确认；确认后应补足到至少两个 reviewer。用户坚持以少于两个 reviewer 继续时属于降级覆盖，不能伪装为正常有效路由，最终状态必须标记为 `incomplete`。
 
-Route Decision 的 `reason` 完整记录目标与默认分支来源、风险信号、排除项、自动集合及补位、requested 追加与去重、风险提升、最终角色顺序与数量、覆盖缩减或降级覆盖，以及批次安排。
+`low + 1 requested` 产生 3 人集合时，有效风险为 `medium`，`medium=3` 是合法 Route Decision；`reason` 只记录“手动扩展”及追加角色。没有 excluded 时不记录“覆盖缩减”，也不要求不存在的排除项。
+
+Route Decision 的 `reason` 完整记录目标与默认分支来源、材料固有风险、排除项、自动集合及补位、requested 追加与去重、容纳数量所需风险、有效风险、最终角色顺序与数量、手动扩展、覆盖缩减或降级覆盖，以及批次安排。
 
 ## 7. Finding 与汇总契约
 
