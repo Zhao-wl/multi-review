@@ -1,6 +1,8 @@
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -27,10 +29,12 @@ def adapter_names(directory: Path, suffix: str) -> set[str]:
     return {path.stem for path in directory.glob(f"*{suffix}")}
 
 
-def run_generator_check() -> subprocess.CompletedProcess[str]:
+def run_generator_check(
+    generator: Path = GENERATOR, cwd: Path = ROOT
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(GENERATOR), "--check"],
-        cwd=ROOT,
+        [sys.executable, str(generator), "--check"],
+        cwd=cwd,
         text=True,
         capture_output=True,
     )
@@ -84,27 +88,58 @@ class AdapterTests(unittest.TestCase):
             self.assertNotIn("tools: Agent", text)
 
     def test_4_generator_check_detects_content_drift_and_extra_adapter(self):
-        result = run_generator_check()
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            temp_generator = temp_root / "scripts" / GENERATOR.name
+            temp_generator.parent.mkdir(parents=True)
+            shutil.copy2(GENERATOR, temp_generator)
 
-        drift_path = ROOT / ".codex" / "agents" / f"{ROLE_IDS[0]}.toml"
-        original = drift_path.read_text(encoding="utf-8")
-        try:
+            source_index = (
+                ROOT
+                / ".agents"
+                / "skills"
+                / "multi-agent-review"
+                / "reviewers"
+                / "index.json"
+            )
+            temp_index = (
+                temp_root
+                / ".agents"
+                / "skills"
+                / "multi-agent-review"
+                / "reviewers"
+                / "index.json"
+            )
+            temp_index.parent.mkdir(parents=True)
+            shutil.copy2(source_index, temp_index)
+
+            result = subprocess.run(
+                [sys.executable, str(temp_generator)],
+                cwd=temp_root,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = run_generator_check(temp_generator, temp_root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            drift_path = (
+                temp_root / ".codex" / "agents" / f"{ROLE_IDS[0]}.toml"
+            )
+            original = drift_path.read_text(encoding="utf-8")
             drift_path.write_text(original + "\n", encoding="utf-8", newline="\n")
-            result = run_generator_check()
+            result = run_generator_check(temp_generator, temp_root)
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn(str(drift_path.relative_to(ROOT)), result.stdout)
-        finally:
+            self.assertIn(str(drift_path.relative_to(temp_root)), result.stdout)
             drift_path.write_text(original, encoding="utf-8", newline="\n")
 
-        extra_path = ROOT / ".claude" / "agents" / "stale-reviewer.md"
-        try:
+            extra_path = (
+                temp_root / ".claude" / "agents" / "stale-reviewer.md"
+            )
             extra_path.write_text("stale\n", encoding="utf-8", newline="\n")
-            result = run_generator_check()
+            result = run_generator_check(temp_generator, temp_root)
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn(str(extra_path.relative_to(ROOT)), result.stdout)
-        finally:
-            extra_path.unlink(missing_ok=True)
+            self.assertIn(str(extra_path.relative_to(temp_root)), result.stdout)
 
     def test_5_claude_skill_is_a_thin_shared_core_entry(self):
         path = ROOT / ".claude" / "skills" / "multi-agent-review" / "SKILL.md"

@@ -784,8 +784,10 @@ git commit -m "feat: add independent reviewer roles"
 
 ```python
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -822,12 +824,40 @@ class AdapterTests(unittest.TestCase):
             self.assertIn("contracts/reviewer-output.schema.json", text)
             self.assertNotIn("tools: Agent", text)
 
-    def test_generator_is_in_sync(self):
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts/generate_review_adapters.py"), "--check"],
-            cwd=ROOT, text=True, capture_output=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    def test_generator_check_detects_content_drift_and_extra_adapter(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            generator = temp_root / "scripts/generate_review_adapters.py"
+            generator.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / "scripts/generate_review_adapters.py", generator)
+            source_index = ROOT / ".agents/skills/multi-agent-review/reviewers/index.json"
+            temp_index = temp_root / ".agents/skills/multi-agent-review/reviewers/index.json"
+            temp_index.parent.mkdir(parents=True)
+            shutil.copy2(source_index, temp_index)
+
+            generated = subprocess.run(
+                [sys.executable, str(generator)], cwd=temp_root,
+                text=True, capture_output=True,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+
+            drift_path = temp_root / ".codex/agents" / f"{ROLE_IDS[0]}.toml"
+            original = drift_path.read_text(encoding="utf-8")
+            drift_path.write_text(original + "\n", encoding="utf-8", newline="\n")
+            drift = subprocess.run(
+                [sys.executable, str(generator), "--check"], cwd=temp_root,
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(drift.returncode, 0)
+            drift_path.write_text(original, encoding="utf-8", newline="\n")
+
+            extra_path = temp_root / ".claude/agents/stale-reviewer.md"
+            extra_path.write_text("stale\n", encoding="utf-8", newline="\n")
+            extra = subprocess.run(
+                [sys.executable, str(generator), "--check"], cwd=temp_root,
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(extra.returncode, 0)
 
     def test_claude_skill_points_to_shared_core(self):
         text = (ROOT / ".claude/skills/multi-agent-review/SKILL.md").read_text(encoding="utf-8")
@@ -836,6 +866,10 @@ class AdapterTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 ```
+
+漂移测试必须在 `TemporaryDirectory` 构造的临时仓库内运行：只复制生成器和
+`reviewers/index.json`，先生成临时的 27 个适配文件，再在临时根制造内容漂移和额外文件。
+测试不得写入或恢复真实 checkout 的 `.codex/`、`.cursor/` 或 `.claude/`。
 
 - [ ] **Step 2：运行测试并确认 RED**
 
@@ -964,7 +998,7 @@ Expected: 5 tests，全部 PASS。
 有效仓库中执行：
 
 ```powershell
-git add .codex/agents .cursor/agents .claude/agents .claude/skills/review scripts/generate_review_adapters.py tests/review-skill/test_adapters.py
+git add .codex/agents .cursor/agents .claude/agents .claude/skills/multi-agent-review scripts/generate_review_adapters.py tests/review-skill/test_adapters.py
 git commit -m "feat: add codex cursor and claude review adapters"
 ```
 
