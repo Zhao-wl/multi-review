@@ -194,6 +194,10 @@ class ContractTests(unittest.TestCase):
         ids = [item["id"] for item in data["reviewers"]]
         self.assertEqual(set(ids), ROLE_IDS)
         self.assertEqual(len(ids), len(set(ids)))
+        stages = {item["id"]: set(item["stages"]) for item in data["reviewers"]}
+        self.assertEqual(stages["plan-feasibility"], {"spec", "plan"})
+        self.assertEqual(stages["test-skeptic"], {"spec", "plan", "implementation", "mixed"})
+        self.assertEqual(stages["requirement-integrity"], {"spec", "plan", "mixed"})
 
     def test_finding_schema_requires_evidence_contract(self):
         schema = load_json(SKILL / "contracts" / "finding.schema.json")
@@ -208,10 +212,23 @@ class ContractTests(unittest.TestCase):
     def test_route_schema_and_routes_reference_known_roles(self):
         schema = load_json(SKILL / "contracts" / "route-decision.schema.json")
         self.assertEqual(schema["properties"]["risk"]["enum"], ["low", "medium", "high"])
+        condition_limits = {}
+        for condition in schema.get("allOf", []):
+            predicate = condition["if"]
+            self.assertEqual(predicate.get("required"), ["risk"])
+            risk = predicate["properties"]["risk"]["const"]
+            limits = condition["then"]["properties"]["required_reviewers"]
+            condition_limits[risk] = (limits["minItems"], limits["maxItems"])
+        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (4, 4), "high": (2, 6)})
         routes = load_json(SKILL / "routing" / "default-routes.yaml")
         referenced = {role for route in routes["routes"] for role in route["reviewers"]}
         self.assertTrue(referenced <= ROLE_IDS)
         self.assertEqual(routes["risk_limits"], {"low": 2, "medium": 4, "high": 6})
+        index = load_json(SKILL / "reviewers" / "index.json")
+        stages = {item["id"]: set(item["stages"]) for item in index["reviewers"]}
+        for route in routes["routes"]:
+            for reviewer in route["reviewers"]:
+                self.assertIn(route["artifact_type"], stages[reviewer])
 
     def test_review_result_is_chinese_and_has_safe_statuses(self):
         schema = load_json(SKILL / "contracts" / "review-result.schema.json")
@@ -220,6 +237,31 @@ class ContractTests(unittest.TestCase):
             schema["properties"]["status"]["enum"],
             ["pass", "needs_changes", "needs_human_decision", "incomplete"],
         )
+        item = schema["properties"]["reviewer_results"]["items"]
+        properties = item.get("properties", {})
+        actual_contract = {
+            "additionalProperties": item.get("additionalProperties"),
+            "required": set(item.get("required", [])),
+            "reviewer": properties.get("reviewer"),
+            "agent_id": properties.get("agent_id"),
+            "status": properties.get("status"),
+            "finding_ids": properties.get("finding_ids"),
+            "limitations": properties.get("limitations"),
+        }
+        expected_contract = {
+            "additionalProperties": False,
+            "required": {"reviewer", "agent_id", "status", "finding_ids", "limitations"},
+            "reviewer": {"type": "string", "enum": sorted(ROLE_IDS)},
+            "agent_id": {"type": "string"},
+            "status": {"type": "string", "enum": ["completed", "failed", "invalid"]},
+            "finding_ids": {
+                "type": "array",
+                "uniqueItems": True,
+                "items": {"type": "string", "pattern": "^F-[0-9]{3,}$"},
+            },
+            "limitations": {"type": "array", "items": {"type": "string"}},
+        }
+        self.assertEqual(actual_contract, expected_contract)
 
     def test_report_template_uses_required_chinese_headings(self):
         text = (SKILL / "templates" / "review-report.md").read_text(encoding="utf-8")
@@ -260,13 +302,13 @@ Expected: exit 0；生成 `.agents/skills/multi-agent-review/SKILL.md` 和 `.age
 ```json
 {
   "reviewers": [
-    {"id":"requirement-integrity","display_name":"需求完整性审查员","description":"检查目标、用户、范围、非目标、术语和隐藏前提。","stages":["spec","plan"],"role_path":"reviewers/requirement-integrity.md"},
+    {"id":"requirement-integrity","display_name":"需求完整性审查员","description":"检查目标、用户、范围、非目标、术语和隐藏前提。","stages":["spec","plan","mixed"],"role_path":"reviewers/requirement-integrity.md"},
     {"id":"acceptance-criteria","display_name":"验收标准审查员","description":"把模糊愿望检查为可观察、可测试、可判定条件。","stages":["spec","plan"],"role_path":"reviewers/acceptance-criteria.md"},
-    {"id":"plan-feasibility","display_name":"计划可行性审查员","description":"检查依赖、顺序、迁移、回滚和验证点。","stages":["plan"],"role_path":"reviewers/plan-feasibility.md"},
+    {"id":"plan-feasibility","display_name":"计划可行性审查员","description":"检查依赖、顺序、迁移、回滚和验证点。","stages":["spec","plan"],"role_path":"reviewers/plan-feasibility.md"},
     {"id":"spec-compliance","display_name":"需求符合性审查员","description":"逐条核对 Spec、实现和测试证据。","stages":["implementation","mixed"],"role_path":"reviewers/spec-compliance.md"},
     {"id":"correctness-auditor","display_name":"正确性审计员","description":"检查条件、状态、异常、并发、幂等和生命周期。","stages":["implementation","mixed"],"role_path":"reviewers/correctness-auditor.md"},
     {"id":"security-abuse","display_name":"安全与滥用审查员","description":"从攻击者角度检查认证、授权、输入和敏感数据。","stages":["spec","plan","implementation","mixed"],"role_path":"reviewers/security-abuse.md"},
-    {"id":"test-skeptic","display_name":"测试证据审查员","description":"检查弱断言、过度 Mock、回归缺口和测试与 AC 的对应关系。","stages":["plan","implementation","mixed"],"role_path":"reviewers/test-skeptic.md"},
+    {"id":"test-skeptic","display_name":"测试证据审查员","description":"检查弱断言、过度 Mock、回归缺口和测试与 AC 的对应关系。","stages":["spec","plan","implementation","mixed"],"role_path":"reviewers/test-skeptic.md"},
     {"id":"integration-contract","display_name":"集成契约审查员","description":"检查 API、Schema、事件、配置、版本兼容和调用边界。","stages":["spec","plan","implementation","mixed"],"role_path":"reviewers/integration-contract.md"},
     {"id":"maintainability-pragmatist","display_name":"可维护性审查员","description":"务实检查重复规则、复杂度、职责边界和可测试性。","stages":["implementation","mixed"],"role_path":"reviewers/maintainability-pragmatist.md"}
   ]
@@ -284,13 +326,13 @@ Expected: exit 0；生成 `.agents/skills/multi-agent-review/SKILL.md` 和 `.age
 `route-decision.schema.json`：
 
 ```json
-{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Route Decision","type":"object","additionalProperties":false,"required":["artifact_type","risk","required_reviewers","reason"],"properties":{"artifact_type":{"type":"string","enum":["spec","plan","implementation","mixed"]},"risk":{"type":"string","enum":["low","medium","high"]},"required_reviewers":{"type":"array","minItems":2,"maxItems":6,"uniqueItems":true,"items":{"type":"string","enum":["acceptance-criteria","correctness-auditor","integration-contract","maintainability-pragmatist","plan-feasibility","requirement-integrity","security-abuse","spec-compliance","test-skeptic"]}},"reason":{"type":"string","minLength":1}}}
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Route Decision","type":"object","additionalProperties":false,"required":["artifact_type","risk","required_reviewers","reason"],"properties":{"artifact_type":{"type":"string","enum":["spec","plan","implementation","mixed"]},"risk":{"type":"string","enum":["low","medium","high"]},"required_reviewers":{"type":"array","minItems":2,"maxItems":6,"uniqueItems":true,"items":{"type":"string","enum":["acceptance-criteria","correctness-auditor","integration-contract","maintainability-pragmatist","plan-feasibility","requirement-integrity","security-abuse","spec-compliance","test-skeptic"]}},"reason":{"type":"string","minLength":1}},"allOf":[{"if":{"properties":{"risk":{"const":"low"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":2}}}},{"if":{"properties":{"risk":{"const":"medium"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":4,"maxItems":4}}}},{"if":{"properties":{"risk":{"const":"high"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":6}}}}]}
 ```
 
 `review-result.schema.json`：
 
 ```json
-{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Review Result","type":"object","additionalProperties":false,"required":["status","risk","reviewed_scope","reviewer_results","findings","limitations","report_language"],"properties":{"status":{"type":"string","enum":["pass","needs_changes","needs_human_decision","incomplete"]},"risk":{"type":"string","enum":["low","medium","high"]},"reviewed_scope":{"type":"array","items":{"type":"string"}},"reviewer_results":{"type":"array","items":{"type":"object"}},"findings":{"type":"array","items":{"$ref":"finding.schema.json"}},"limitations":{"type":"array","items":{"type":"string"}},"report_language":{"const":"zh-CN"}}}
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Review Result","type":"object","additionalProperties":false,"required":["status","risk","reviewed_scope","reviewer_results","findings","limitations","report_language"],"properties":{"status":{"type":"string","enum":["pass","needs_changes","needs_human_decision","incomplete"]},"risk":{"type":"string","enum":["low","medium","high"]},"reviewed_scope":{"type":"array","items":{"type":"string"}},"reviewer_results":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["reviewer","agent_id","status","finding_ids","limitations"],"properties":{"reviewer":{"type":"string","enum":["acceptance-criteria","correctness-auditor","integration-contract","maintainability-pragmatist","plan-feasibility","requirement-integrity","security-abuse","spec-compliance","test-skeptic"]},"agent_id":{"type":"string"},"status":{"type":"string","enum":["completed","failed","invalid"]},"finding_ids":{"type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^F-[0-9]{3,}$"}},"limitations":{"type":"array","items":{"type":"string"}}}}},"findings":{"type":"array","items":{"$ref":"finding.schema.json"}},"limitations":{"type":"array","items":{"type":"string"}},"report_language":{"const":"zh-CN"}}}
 ```
 
 - [ ] **Step 6：写入 JSON-compatible YAML 路由表**

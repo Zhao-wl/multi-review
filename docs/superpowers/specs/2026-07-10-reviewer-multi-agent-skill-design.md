@@ -96,13 +96,13 @@ tests/
 
 | Reviewer ID | 中文性格 | 阶段 | 核心职责 | 明确排除 |
 |---|---|---|---|---|
-| `requirement-integrity` | 追问型需求编辑 | Spec、Plan | 目标、用户、范围、非目标、术语、隐藏前提 | 不评代码风格 |
+| `requirement-integrity` | 追问型需求编辑 | Spec、Plan、Mixed | 目标、用户、范围、非目标、术语、隐藏前提 | 不评代码风格 |
 | `acceptance-criteria` | 可证伪的验收官 | Spec、Plan | 可观察、可测试、可判定的验收条件 | 不设计具体实现 |
-| `plan-feasibility` | 务实的落地工程师 | Plan | 依赖、顺序、迁移、回滚、验证点 | 不重写整个方案 |
+| `plan-feasibility` | 务实的落地工程师 | Spec、Plan | 依赖、顺序、迁移、回滚、验证点 | 不重写整个方案 |
 | `spec-compliance` | 逐条核对的审计员 | Implementation | Spec、实现、测试的追溯矩阵 | 不自行改变需求 |
 | `correctness-auditor` | 严谨的逻辑检查者 | Implementation | 条件、状态、异常、并发、幂等、生命周期 | 不提交纯风格意见 |
 | `security-abuse` | 攻击者思维的风险猎手 | 全阶段 | 认证、授权、输入、敏感数据、滥用路径 | 不泛化为普通代码审查 |
-| `test-skeptic` | 不轻信测试的证据怀疑者 | Plan、Implementation | 弱断言、过度 Mock、回归缺口、测试与 AC 对应关系 | 不把“有测试”视为通过 |
+| `test-skeptic` | 不轻信测试的证据怀疑者 | Spec、Plan、Implementation、Mixed | 弱断言、过度 Mock、回归缺口、测试与 AC 对应关系 | 不把“有测试”视为通过 |
 | `integration-contract` | 边界守门人 | 全阶段 | API、Schema、事件、配置、版本兼容、调用链 | 不深入无关内部实现 |
 | `maintainability-pragmatist` | 务实维护者 | Implementation、Refactor | 重复规则、复杂度、职责边界、可测试性 | 不要求理想化重构 |
 
@@ -147,7 +147,7 @@ evidence_rules: strict
 |---|---:|---|
 | 低 | 2 | 文档、注释、小配置、局部低风险修改 |
 | 中 | 4 | 普通业务逻辑、多文件重构、测试或接口调整 |
-| 高 | 最多 6 | 权限、支付、迁移、存档、CI/CD、外部集成、发布和关键性能路径 |
+| 高 | 2–6 | 权限、支付、迁移、存档、CI/CD、外部集成、发布和关键性能路径 |
 
 典型路由：
 
@@ -155,6 +155,8 @@ evidence_rules: strict
 - Plan：`plan-feasibility`、`acceptance-criteria`；按风险增加 `requirement-integrity`、`integration-contract`、`security-abuse`、`test-skeptic`。
 - Implementation：`correctness-auditor`、`spec-compliance`；按风险增加 `test-skeptic`、`integration-contract`、`security-abuse`、`maintainability-pragmatist`。
 - Mixed：优先覆盖 Spec Compliance、Correctness、Security、Test、Integration，再根据材料补 Requirement 或 Plan Reviewer。
+
+Route Decision 使用 Draft 2020-12 条件约束：`low` 的 `required_reviewers` 精确为 2，`medium` 精确为 4，`high` 为 2–6。
 
 Router 必须在派遣前一次确定完整 reviewer 集合。平台并发槽位不足时分批运行；后一批仍然只接收原始 Packet，不能接收前一批 findings。主代理等待全部 reviewer 完成后才开始 Chair 汇总。
 
@@ -186,6 +188,16 @@ confidence: low | medium | high
 以上英文值仅用于 Schema 和跨平台路由。中文报告分别显示为“阻塞问题”“建议问题”“待确认问题”，不直接展示英文严重度。
 
 关键问题不能仅凭怀疑标为 `blocking`。
+
+`Review Result.reviewer_results` 的每一项都是关闭对象，不接受未声明字段，并且必须包含：
+
+```yaml
+reviewer: requirement-integrity  # 9 个稳定 reviewer ID 之一
+agent_id: string                 # 实际子代理标识
+status: completed | failed | invalid
+finding_ids: []                  # 唯一的 F-001 形式 Finding ID
+limitations: []                  # 字符串数组
+```
 
 Chair 的处理规则：
 

@@ -21,6 +21,10 @@ class ContractTests(unittest.TestCase):
         ids = [item["id"] for item in data["reviewers"]]
         self.assertEqual(set(ids), ROLE_IDS)
         self.assertEqual(len(ids), len(set(ids)))
+        stages = {item["id"]: set(item["stages"]) for item in data["reviewers"]}
+        self.assertEqual(stages["plan-feasibility"], {"spec", "plan"})
+        self.assertEqual(stages["test-skeptic"], {"spec", "plan", "implementation", "mixed"})
+        self.assertEqual(stages["requirement-integrity"], {"spec", "plan", "mixed"})
 
     def test_finding_schema_requires_evidence_contract(self):
         schema = load_json(SKILL / "contracts" / "finding.schema.json")
@@ -35,10 +39,23 @@ class ContractTests(unittest.TestCase):
     def test_route_schema_and_routes_reference_known_roles(self):
         schema = load_json(SKILL / "contracts" / "route-decision.schema.json")
         self.assertEqual(schema["properties"]["risk"]["enum"], ["low", "medium", "high"])
+        condition_limits = {}
+        for condition in schema.get("allOf", []):
+            predicate = condition["if"]
+            self.assertEqual(predicate.get("required"), ["risk"])
+            risk = predicate["properties"]["risk"]["const"]
+            limits = condition["then"]["properties"]["required_reviewers"]
+            condition_limits[risk] = (limits["minItems"], limits["maxItems"])
+        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (4, 4), "high": (2, 6)})
         routes = load_json(SKILL / "routing" / "default-routes.yaml")
         referenced = {role for route in routes["routes"] for role in route["reviewers"]}
         self.assertTrue(referenced <= ROLE_IDS)
         self.assertEqual(routes["risk_limits"], {"low": 2, "medium": 4, "high": 6})
+        index = load_json(SKILL / "reviewers" / "index.json")
+        stages = {item["id"]: set(item["stages"]) for item in index["reviewers"]}
+        for route in routes["routes"]:
+            for reviewer in route["reviewers"]:
+                self.assertIn(route["artifact_type"], stages[reviewer])
 
     def test_review_result_is_chinese_and_has_safe_statuses(self):
         schema = load_json(SKILL / "contracts" / "review-result.schema.json")
@@ -47,6 +64,31 @@ class ContractTests(unittest.TestCase):
             schema["properties"]["status"]["enum"],
             ["pass", "needs_changes", "needs_human_decision", "incomplete"],
         )
+        item = schema["properties"]["reviewer_results"]["items"]
+        properties = item.get("properties", {})
+        actual_contract = {
+            "additionalProperties": item.get("additionalProperties"),
+            "required": set(item.get("required", [])),
+            "reviewer": properties.get("reviewer"),
+            "agent_id": properties.get("agent_id"),
+            "status": properties.get("status"),
+            "finding_ids": properties.get("finding_ids"),
+            "limitations": properties.get("limitations"),
+        }
+        expected_contract = {
+            "additionalProperties": False,
+            "required": {"reviewer", "agent_id", "status", "finding_ids", "limitations"},
+            "reviewer": {"type": "string", "enum": sorted(ROLE_IDS)},
+            "agent_id": {"type": "string"},
+            "status": {"type": "string", "enum": ["completed", "failed", "invalid"]},
+            "finding_ids": {
+                "type": "array",
+                "uniqueItems": True,
+                "items": {"type": "string", "pattern": "^F-[0-9]{3,}$"},
+            },
+            "limitations": {"type": "array", "items": {"type": "string"}},
+        }
+        self.assertEqual(actual_contract, expected_contract)
 
     def test_report_template_uses_required_chinese_headings(self):
         text = (SKILL / "templates" / "review-report.md").read_text(encoding="utf-8")
