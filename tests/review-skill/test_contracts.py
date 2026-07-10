@@ -46,7 +46,7 @@ class ContractTests(unittest.TestCase):
             risk = predicate["properties"]["risk"]["const"]
             limits = condition["then"]["properties"]["required_reviewers"]
             condition_limits[risk] = (limits["minItems"], limits["maxItems"])
-        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (4, 4), "high": (2, 6)})
+        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (2, 4), "high": (2, 6)})
         routes = load_json(SKILL / "routing" / "default-routes.yaml")
         referenced = {role for route in routes["routes"] for role in route["reviewers"]}
         self.assertTrue(referenced <= ROLE_IDS)

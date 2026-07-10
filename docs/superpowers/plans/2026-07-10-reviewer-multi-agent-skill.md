@@ -219,7 +219,7 @@ class ContractTests(unittest.TestCase):
             risk = predicate["properties"]["risk"]["const"]
             limits = condition["then"]["properties"]["required_reviewers"]
             condition_limits[risk] = (limits["minItems"], limits["maxItems"])
-        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (4, 4), "high": (2, 6)})
+        self.assertEqual(condition_limits, {"low": (2, 2), "medium": (2, 4), "high": (2, 6)})
         routes = load_json(SKILL / "routing" / "default-routes.yaml")
         referenced = {role for route in routes["routes"] for role in route["reviewers"]}
         self.assertTrue(referenced <= ROLE_IDS)
@@ -326,7 +326,7 @@ Expected: exit 0；生成 `.agents/skills/multi-agent-review/SKILL.md` 和 `.age
 `route-decision.schema.json`：
 
 ```json
-{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Route Decision","type":"object","additionalProperties":false,"required":["artifact_type","risk","required_reviewers","reason"],"properties":{"artifact_type":{"type":"string","enum":["spec","plan","implementation","mixed"]},"risk":{"type":"string","enum":["low","medium","high"]},"required_reviewers":{"type":"array","minItems":2,"maxItems":6,"uniqueItems":true,"items":{"type":"string","enum":["acceptance-criteria","correctness-auditor","integration-contract","maintainability-pragmatist","plan-feasibility","requirement-integrity","security-abuse","spec-compliance","test-skeptic"]}},"reason":{"type":"string","minLength":1}},"allOf":[{"if":{"properties":{"risk":{"const":"low"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":2}}}},{"if":{"properties":{"risk":{"const":"medium"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":4,"maxItems":4}}}},{"if":{"properties":{"risk":{"const":"high"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":6}}}}]}
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Route Decision","type":"object","additionalProperties":false,"required":["artifact_type","risk","required_reviewers","reason"],"properties":{"artifact_type":{"type":"string","enum":["spec","plan","implementation","mixed"]},"risk":{"type":"string","enum":["low","medium","high"]},"required_reviewers":{"type":"array","minItems":2,"maxItems":6,"uniqueItems":true,"items":{"type":"string","enum":["acceptance-criteria","correctness-auditor","integration-contract","maintainability-pragmatist","plan-feasibility","requirement-integrity","security-abuse","spec-compliance","test-skeptic"]}},"reason":{"type":"string","minLength":1}},"allOf":[{"if":{"properties":{"risk":{"const":"low"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":2}}}},{"if":{"properties":{"risk":{"const":"medium"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":4}}}},{"if":{"properties":{"risk":{"const":"high"}},"required":["risk"]},"then":{"properties":{"required_reviewers":{"minItems":2,"maxItems":6}}}}]}
 ```
 
 `review-result.schema.json`：

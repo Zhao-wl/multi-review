@@ -147,7 +147,7 @@ evidence_rules: strict
 |---|---:|---|
 | 低 | 2 | 文档、注释、小配置、局部低风险修改 |
 | 中 | 4 | 普通业务逻辑、多文件重构、测试或接口调整 |
-| 高 | 2–6 | 权限、支付、迁移、存档、CI/CD、外部集成、发布和关键性能路径 |
+| 高 | 最多 6 | 权限、支付、迁移、存档、CI/CD、外部集成、发布和关键性能路径 |
 
 典型路由：
 
@@ -156,11 +156,11 @@ evidence_rules: strict
 - Implementation：`correctness-auditor`、`spec-compliance`；按风险增加 `test-skeptic`、`integration-contract`、`security-abuse`、`maintainability-pragmatist`。
 - Mixed：优先覆盖 Spec Compliance、Correctness、Security、Test、Integration，再根据材料补 Requirement 或 Plan Reviewer。
 
-Route Decision 使用 Draft 2020-12 条件约束：`low` 的 `required_reviewers` 精确为 2，`medium` 精确为 4，`high` 为 2–6。
+表中的 2、4、最多 6 是自动路由的默认 reviewer 数量，不是用户手动排除后的精确数量。Route Decision 使用 Draft 2020-12 条件约束表达合法范围：`low` 的 `required_reviewers` 精确为 2，`medium` 为 2–4，`high` 为 2–6。
 
 Router 必须在派遣前一次确定完整 reviewer 集合。平台并发槽位不足时分批运行；后一批仍然只接收原始 Packet，不能接收前一批 findings。主代理等待全部 reviewer 完成后才开始 Chair 汇总。
 
-用户手动指定的 reviewer 优先于默认组合。排除后少于两个 reviewer 时必须提示异构覆盖不足，并在用户确认后才继续。
+用户手动指定的 reviewer 优先于默认组合。手动排除后仍有至少两个 reviewer 时可以生成有效 Route Decision；低于该风险的自动路由默认数量时，结果必须标明覆盖不足。排除后少于两个 reviewer 时不能生成有效 Route Decision，必须提示异构覆盖不足并等待用户确认；确认后应补足到至少两个 reviewer。用户确认以少于两个 reviewer 继续时属于降级覆盖，不能伪装为正常有效路由，最终状态必须标记为 `incomplete`。
 
 ## 7. Finding 与汇总契约
 
