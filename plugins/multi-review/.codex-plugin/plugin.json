@@ -1,6 +1,6 @@
 {
   "name": "multi-review",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "由独立子代理执行的结构化多角色审查工作流。",
   "author": {
     "name": "Zhao-wl",
@@ -29,7 +29,7 @@
       "使用 multi-agent-review 审查当前分支的改动。",
       "使用 multi-agent-review 审查这个实现是否符合 Spec。"
     ],
-    "brandColor": "#1E2B5C",
+    "brandColor": "#38BDF8",
     "composerIcon": "./assets/logo.png",
     "logo": "./assets/logo.png"
   }
