@@ -1,0 +1,20 @@
+{
+  "name": "multi-review",
+  "interface": {
+    "displayName": "Multi Review"
+  },
+  "plugins": [
+    {
+      "name": "multi-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/multi-review"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

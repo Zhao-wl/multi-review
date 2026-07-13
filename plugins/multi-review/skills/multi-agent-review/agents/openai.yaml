@@ -1,0 +1,4 @@
+interface:
+  display_name: "多子代理审查"
+  short_description: "按风险启动多位独立审查员并汇总可追溯的中文证据化审查报告"
+  default_prompt: "请使用 $multi-agent-review 审查当前变更，按风险启动独立 reviewer，并输出中文证据化报告。"

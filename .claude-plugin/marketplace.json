@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "multi-review",
+  "version": "0.1.2",
+  "description": "Zhao-wl 维护的多角色代码与设计审查插件市场。",
+  "owner": {
+    "name": "Zhao-wl",
+    "url": "https://github.com/Zhao-wl"
+  },
+  "plugins": [
+    {
+      "name": "multi-review",
+      "source": "./plugins/multi-review",
+      "description": "由独立只读 reviewer 执行的结构化多角色审查。",
+      "version": "0.1.2",
+      "category": "productivity"
+    }
+  ]
+}

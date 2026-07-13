@@ -1,0 +1,34 @@
+{
+  "name": "multi-review",
+  "version": "0.1.2",
+  "description": "由独立子代理执行的结构化多角色审查工作流。",
+  "author": {
+    "name": "Zhao-wl",
+    "url": "https://github.com/Zhao-wl"
+  },
+  "homepage": "https://github.com/Zhao-wl/multi-review#readme",
+  "repository": "https://github.com/Zhao-wl/multi-review",
+  "keywords": [
+    "code-review",
+    "spec-review",
+    "multi-agent",
+    "quality"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Multi Review",
+    "shortDescription": "结构化多角色只读审查",
+    "longDescription": "使用隔离 reviewer 审查 Spec、Plan、实现和 Diff。",
+    "developerName": "Zhao-wl",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/Zhao-wl/multi-review#readme",
+    "defaultPrompt": [
+      "使用 multi-agent-review 审查当前分支的改动。",
+      "使用 multi-agent-review 审查这个实现是否符合 Spec。"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

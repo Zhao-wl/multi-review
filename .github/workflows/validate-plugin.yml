@@ -1,0 +1,21 @@
+name: Validate marketplace plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify generated adapters and marketplace artifact
+        run: |
+          python scripts/generate_review_adapters.py --check
+          python scripts/build_marketplace_plugin.py --check
+      - name: Run contract and marketplace tests
+        run: python -m unittest discover -s tests/review-skill -p "test_*.py"
